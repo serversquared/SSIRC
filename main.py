@@ -110,6 +110,8 @@ def server_handler(settings):
 				elif data['event'] == 'tx_data':
 					print('[{}] {}:{} <- {}'.format(int(time.time()), data['client_from'][0], data['client_from'][1], data['data']))
 				elif data['event'] == 'client_disconnect':
+					connected_clients -= 1
+					update_tracked_client(settings, q, data['client_from'], True)
 					print('[{}] {}: Disconnected from port {} ({}/{})'.format(int(time.time()), data['client_from'][0], data['client_from'][1], connected_clients, settings['max_clients']))
 
 			replace_queue_item(settings, q, 'connected_clients', connected_clients)
