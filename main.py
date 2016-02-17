@@ -1,4 +1,5 @@
 import socket
+import json
 import multiprocessing
 import sys
 import time
@@ -13,14 +14,32 @@ default_max_clients = 32	# Total number of clients allowed.
 default_max_clients_per_ip = 4	# Number of clients allowed per IP address.
 default_server_delay = 0.02	# Time in seconds to delay various server operations.
 
-def client_handler():
+def client_handler(*args, **kwargs):
 	pass
 
-def server_thread():
+def server_thread(*args, **kwargs):
 	pass
 
 def server_handler(settings):
-	pass
+	try:
+		q = multiprocessing.Queue()
+		server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+		server.settimeout(None)
+		server.bind((settings['bound_ip'], settings['bound_port']))
+		server.listen(1)
+		server_ip, server_port = server.getsockname()
+		print('[{}] Server bound to {}:{}'.format(int(time.time()), server_ip, server_port))
+
+		thread = multiprocessing.Process(target=server_thread, args=(settings, server, q))
+		thread.daemon = False
+		thread.start()
+
+		while True:
+			pass
+
+	finally:
+		pass
 
 def main():
 	parser = argparse.ArgumentParser(description='(server)^2 IRC')
@@ -31,8 +50,9 @@ def main():
 	parser.add_argument('-m', '--max-clients', type=int, metavar='CLIENTS', dest='max_clients', help='total number of clients allowed', action='store', default=default_max_clients)
 	parser.add_argument('-c', '--clients-per-ip', type=int, metavar='CLIENTS', dest='max_clients_per_ip', help='max number of clients allowed per address', action='store', default=default_max_clients_per_ip)
 	parser.add_argument('-D', '--server-delay', type=float, metavar='SECONDS', dest='server_delay', help='time in seconds to delay verious server operations', action='store', default=default_server_delay)
-
-	server_handler(vars(parser.parse_args()))
+	settings = vars(parser.parse_args())
+	if settings['timeout_seconds'] < 1:	settings['timeout_seconds'] = None
+	server_handler(settings)
 
 if __name__ == '__main__':
 	try:
