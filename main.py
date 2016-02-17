@@ -74,11 +74,43 @@ def update_tracked_client(settings, q, peer_name, remove=False):
 			data[peer_name[0]] -= 10
 	q.put([json.dumps(data)])
 
-def client_handler(*args, **kwargs):
+def client_thread(*args, **kwargs):
 	pass
 
-def server_thread(*args, **kwargs):
-	pass
+def server_thread(settings, server, q):
+	try:
+		while True:
+			connected_clients = get_client_tracker(settings, q)
+			if connected_clients < settings['max_clients']:
+				client, client_from = server.accept()
+				if get_client_tracker(settings, q, client_from) < settings['max_clients_per_ip']:
+					q.put([json.dumps({'event': 'client_connect', 'client_from': client_from})])
+					client.settimeout(settings['timeout_seconds'])
+
+					thread = multiprocessing.Process(target=client_thread, args=(settings, client, q))
+					thread.daemon = True
+					thread.start()
+				else:
+					#Client is connected, but we don't want them.
+					q.put([json.dumps({'event': 'client_reject', 'client_from': client_from, 'reason': 'too many connections'})])
+					client.shutdown(socket.SHUT_RDWR)
+					client.close()
+			else:
+				try:
+					server.settimeout(0.1)
+					client, client_from = server.accept()
+					# Client is connected, but we don't want them.
+					q.put([json.dumps({'event': 'client_reject', 'client_from': client_from, 'reason': 'server full'})])
+					client.shutdown(socket.SHUT_RDWR)
+					client.close()
+				except timeout:
+					pass
+				finally:
+					server.settimeout(None)
+
+			time.sleep(settings['server_delay'])
+	except KeyboardInterrupt:
+		pass
 
 def server_handler(settings):
 	try:
@@ -113,6 +145,8 @@ def server_handler(settings):
 					connected_clients -= 1
 					update_tracked_client(settings, q, data['client_from'], True)
 					print('[{}] {}: Disconnected from port {} ({}/{})'.format(int(time.time()), data['client_from'][0], data['client_from'][1], connected_clients, settings['max_clients']))
+				elif data['event'] == 'client_reject':
+					print('[{}] {}: Rejected from port {} ({})'.format(int(time.time()), data['client_from'][0], data['client_from'][1], data['reason']))
 
 			replace_queue_item(settings, q, 'connected_clients', connected_clients)
 			time.sleep(settings['server_delay'])
