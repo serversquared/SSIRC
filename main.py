@@ -14,6 +14,9 @@ default_max_clients = 32	# Total number of clients allowed.
 default_max_clients_per_ip = 4	# Number of clients allowed per IP address.
 default_server_delay = 0.02	# Time in seconds to delay various server operations.
 
+def safe_string(dangerous_string):
+	return dangerous_string.replace('\n', '\\n').replace('\r', '\\r').replace('\033[', '[CSI]').replace('\033', '[ESC]')
+
 def search_queue(q, key):
 	mismatched = []
 	matched = None
@@ -103,9 +106,9 @@ def server_handler(settings):
 					update_tracked_client(settings, q, data['client_from'], False)
 					print('[{}] {}: Connected on port {} ({}/{})'.format(int(time.time()), data['client_from'][0], data['client_from'][1], connected_clients, settings['max_clients']))
 				elif data['event'] == 'rx_data':
-					pass
+					print('[{}] {}:{} -> {}'.format(int(time.time()), data['client_from'][0], data['client_from'][1], data['data']))
 				elif data['event'] == 'tx_data':
-					pass
+					print('[{}] {}:{} <- {}'.format(int(time.time()), data['client_from'][0], data['client_from'][1], data['data']))
 				elif data['event'] == 'client_disconnect':
 					print('[{}] {}: Disconnected from port {} ({}/{})'.format(int(time.time()), data['client_from'][0], data['client_from'][1], connected_clients, settings['max_clients']))
 
