@@ -14,6 +14,63 @@ default_max_clients = 32	# Total number of clients allowed.
 default_max_clients_per_ip = 4	# Number of clients allowed per IP address.
 default_server_delay = 0.02	# Time in seconds to delay various server operations.
 
+def search_queue(q, key):
+	mismatched = []
+	matched = None
+	while not q.empty():
+		item = q.get()
+		if type(item) is list and type(item[0]) is str:
+			data = json.loads(item[0])
+			if key in data:
+				matched = data
+				break
+			else:
+				mismatched.append(item)
+		else:
+			# This means the item is invalid but we'll shove it back in anyways.
+			mismatched.append(item)
+	for i in range(len(mismatched)):
+		q.put(mismatched[i])
+	return matched
+
+def replace_queue_item(settings, q, key, value):
+	data = None
+	while not type(data) is dict:
+		time.sleep(settings['server_delay'])
+		data = search_queue(q, key)
+	data[key] = value
+	q.put([json.dumps(data)])
+
+def get_client_tracker(settings, q, peer_name=None):
+	data = None
+	while not type(data) is dict:
+		time.sleep(settings['server_delay'])
+		data = search_queue(q, 'connected_clients')
+	q.put([json.dumps(data)])
+	if not peer_name:
+		return data['connected_clients']
+	else:
+		if peer_name[0] in data:
+			return data[peer_name[0]]
+		else:
+			return False
+
+def update_tracked_client(settings, q, peer_name, remove=False):
+	data = None
+	while not type(data) is dict:
+		time.sleep(settings['server_delay'])
+		data = search_queue(q, 'connected_clients')
+	if not peer_name[0] in data:
+		data[peer_name[0]] = 1
+	elif not remove:
+		data[peer_name[0]] += 1
+	elif remove:
+		if data[peer_name[0]] <= 1:
+			del data[peer_name[0]]
+		else:
+			data[peer_name[0]] -= 10
+	q.put([json.dumps(data)])
+
 def client_handler(*args, **kwargs):
 	pass
 
@@ -31,12 +88,29 @@ def server_handler(settings):
 		server_ip, server_port = server.getsockname()
 		print('[{}] Server bound to {}:{}'.format(int(time.time()), server_ip, server_port))
 
+		connected_clients = 0
+		q.put([json.dumps({'connected_clients': connected_clients})])
+
 		thread = multiprocessing.Process(target=server_thread, args=(settings, server, q))
 		thread.daemon = False
 		thread.start()
 
 		while True:
-			pass
+			data = search_queue(q, 'event')
+			if data:
+				if data['event'] == 'client_connect':
+					connected_clients += 1
+					update_tracked_client(settings, q, data['client_from'], False)
+					print('[{}] {}: Connected on port {} ({}/{})'.format(int(time.time()), data['client_from'][0], data['client_from'][1], connected_clients, settings['max_clients']))
+				elif data['event'] == 'rx_data':
+					pass
+				elif data['event'] == 'tx_data':
+					pass
+				elif data['event'] == 'client_disconnect':
+					print('[{}] {}: Disconnected from port {} ({}/{})'.format(int(time.time()), data['client_from'][0], data['client_from'][1], connected_clients, settings['max_clients']))
+
+			replace_queue_item(settings, q, 'connected_clients', connected_clients)
+			time.sleep(settings['server_delay'])
 
 	finally:
 		pass
