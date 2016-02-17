@@ -113,7 +113,9 @@ def server_handler(settings):
 			time.sleep(settings['server_delay'])
 
 	finally:
-		pass
+		server.shutdown(socket.SHUT_RDWR)
+		server.close()
+		print('\nServer closed.')
 
 def main():
 	parser = argparse.ArgumentParser(description='(server)^2 IRC')
