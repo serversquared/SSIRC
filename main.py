@@ -74,8 +74,21 @@ def update_tracked_client(settings, q, peer_name, remove=False):
 			data[peer_name[0]] -= 10
 	q.put([json.dumps(data)])
 
-def client_thread(*args, **kwargs):
-	pass
+def client_thread(settings, client, q):
+	try:
+		client_from = client.getpeername()
+		while True:
+			data = client.recv(settings['buffer_size']).decode()
+			if data == '':	break
+			q.put([json.dumps({'event': 'rx_data', 'data': data, 'client_from': client_from})])
+
+			time.sleep(settings['server_delay'])
+	except:
+		try:	client.shutdown(socket.SHUT_RDWR)
+		except:	pass
+	finally:
+		client.close()
+		q.put([json.dumps({'event': 'client_disconnect', 'client_from': client_from})])
 
 def server_thread(settings, server, q):
 	try:
@@ -91,7 +104,7 @@ def server_thread(settings, server, q):
 					thread.daemon = True
 					thread.start()
 				else:
-					#Client is connected, but we don't want them.
+					# Client is connected, but we don't want them.
 					q.put([json.dumps({'event': 'client_reject', 'client_from': client_from, 'reason': 'too many connections'})])
 					client.shutdown(socket.SHUT_RDWR)
 					client.close()
@@ -138,9 +151,9 @@ def server_handler(settings):
 					update_tracked_client(settings, q, data['client_from'], False)
 					print('[{}] {}: Connected on port {} ({}/{})'.format(int(time.time()), data['client_from'][0], data['client_from'][1], connected_clients, settings['max_clients']))
 				elif data['event'] == 'rx_data':
-					print('[{}] {}:{} -> {}'.format(int(time.time()), data['client_from'][0], data['client_from'][1], data['data']))
+					print(safe_string('[{}] {}:{} -> {}'.format(int(time.time()), data['client_from'][0], data['client_from'][1], data['data'])))
 				elif data['event'] == 'tx_data':
-					print('[{}] {}:{} <- {}'.format(int(time.time()), data['client_from'][0], data['client_from'][1], data['data']))
+					print(safe_string('[{}] {}:{} <- {}'.format(int(time.time()), data['client_from'][0], data['client_from'][1], data['data'])))
 				elif data['event'] == 'client_disconnect':
 					connected_clients -= 1
 					update_tracked_client(settings, q, data['client_from'], True)
